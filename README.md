@@ -7,7 +7,7 @@ To-Do app with local PostgreSQL connectivity.
 - Python 3.13+
 - PostgreSQL installed locally
 - A database named `todo_app`
-- A PostgreSQL user named `todo_app_user` with password `todo_password`
+- A PostgreSQL user named `todo_app_user` with `todo_password`
 
 ## Quick start
 
