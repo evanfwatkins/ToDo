@@ -72,6 +72,18 @@ cd C:\Users\evanf\Code\ToDo
 python app.py
 ```
 
+## Upcoming Changes
+
+Planned work for hosting the application on an Ubuntu server:
+
+- Move PostgreSQL to the Ubuntu server and migrate the local database.
+- Store database credentials in environment variables instead of `app.py`.
+- Install the Python dependencies in a server-side virtual environment.
+- Run the Dash app with a production WSGI server such as Gunicorn.
+- Add a `systemd` service so the application starts automatically.
+- Put Nginx in front of the app for a stable public URL and HTTPS.
+- Restrict PostgreSQL access so it is not exposed publicly.
+
 ## Local setup
 
 From the project folder:
@@ -113,18 +125,23 @@ cd C:\Users\evanf\Code\ToDo
 CREATE TABLE tasks (
     task_id SERIAL PRIMARY KEY,
     user_id TEXT NOT NULL DEFAULT 'local',
-    task_value TEXT NOT NULL
+    task_value TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE notes (
     note_id SERIAL PRIMARY KEY,
     task_id INTEGER NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
     note_value TEXT NOT NULL,
-    completed BOOLEAN NOT NULL DEFAULT FALSE
+    completed BOOLEAN NOT NULL DEFAULT FALSE,
+    sort_order INTEGER NOT NULL DEFAULT 0
 );
 ```
 
-Existing databases are upgraded automatically when the app starts.
+Existing databases are upgraded automatically when the app starts. Use the
+dark-gray up/down arrows to change task priority or reorder notes within a task.
+Priority values are normalized to `1, 2, 3, ... n`, with `1` as the highest
+priority.
 
 ## Run database queries
 
@@ -170,6 +187,13 @@ You can also run a single query directly from PowerShell:
 Use the `postgres` user and connect to the `postgres` database for administrator
 queries, such as checking databases or roles. The `postgres` password is the
 administrator password, not `todo_password`.
+
+The app also includes a **PostgreSQL Query Executor** below the task list. Enter
+a single `SELECT` query and choose **Run Query** to display the results in the
+app. SQL keywords are case-insensitive, so `select ... from ...` works the same
+as `SELECT ... FROM ...`. The in-app executor is read-only and displays up to
+500 rows at a time; it does not allow `INSERT`, `UPDATE`, `DELETE`, or multiple
+statements.
 
 ## Troubleshooting
 

@@ -34,7 +34,8 @@ def ensure_schema():
                 CREATE TABLE IF NOT EXISTS tasks (
                     task_id SERIAL PRIMARY KEY,
                     user_id TEXT NOT NULL DEFAULT 'local',
-                    task_value TEXT NOT NULL
+                    task_value TEXT NOT NULL,
+                    sort_order INTEGER NOT NULL DEFAULT 0
                 )
             ''')
             cur.execute('''
@@ -42,10 +43,15 @@ def ensure_schema():
                     note_id SERIAL PRIMARY KEY,
                     task_id INTEGER NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
                     note_value TEXT NOT NULL,
-                    completed BOOLEAN NOT NULL DEFAULT FALSE
+                    completed BOOLEAN NOT NULL DEFAULT FALSE,
+                    sort_order INTEGER NOT NULL DEFAULT 0
                 )
             ''')
+            cur.execute('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0')
             cur.execute('ALTER TABLE notes ADD COLUMN IF NOT EXISTS completed BOOLEAN NOT NULL DEFAULT FALSE')
+            cur.execute('ALTER TABLE notes ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0')
+            cur.execute('UPDATE tasks SET sort_order = task_id WHERE sort_order = 0')
+            cur.execute('UPDATE notes SET sort_order = note_id WHERE sort_order = 0')
         conn.commit()
 
 
@@ -79,9 +85,16 @@ app.index_string = '''
             body {
                 margin: 0;
                 min-height: 100vh;
-                font-family: 'Segoe UI', sans-serif;
+                font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+                font-weight: 500;
                 background: linear-gradient(180deg, var(--color-dark-slate) 0%, var(--color-deep-forest) 100%);
                 color: var(--color-text-primary);
+            }
+
+            button,
+            input,
+            textarea {
+                font-family: inherit;
             }
 
             .todo-app {
@@ -109,6 +122,7 @@ app.index_string = '''
                 min-height: 52px;
                 padding: 13px 14px;
                 font-size: clamp(14px, 1.2vw, 16px);
+                font-weight: 600;
                 line-height: 1.4;
                 border: 1px solid var(--color-muted-pine);
                 border-radius: 12px;
@@ -136,7 +150,7 @@ app.index_string = '''
                 border-radius: 12px;
                 background: linear-gradient(180deg, var(--color-ocean-storm) 0%, var(--color-muted-pine) 100%);
                 color: var(--color-text-primary);
-                font-weight: 600;
+                font-weight: 700;
                 cursor: pointer;
                 transition: all 0.2s ease;
             }
@@ -152,6 +166,130 @@ app.index_string = '''
                 border-radius: 18px;
                 overflow: hidden;
                 width: 100%;
+            }
+
+            .query-panel {
+                margin-top: 24px;
+                padding: 18px;
+                background: var(--color-midnight-moss);
+                border: 1px solid var(--color-muted-pine);
+                border-radius: 14px;
+            }
+
+            .query-panel h2 {
+                color: var(--color-text-primary);
+                letter-spacing: 0;
+            }
+
+            .query-summary {
+                padding: 2px 0;
+                color: var(--color-text-primary);
+                cursor: pointer;
+                font-size: 18px;
+                font-weight: 700;
+                list-style-position: inside;
+            }
+
+            .query-panel[open] .query-summary {
+                margin-bottom: 16px;
+            }
+
+            .query-input {
+                width: 100%;
+                min-height: 120px;
+                padding: 12px;
+                resize: vertical;
+                box-sizing: border-box;
+                border: 1px solid var(--color-muted-pine);
+                border-radius: 8px;
+                background: var(--color-dark-slate);
+                color: var(--color-text-primary);
+                font-family: inherit;
+                font-size: 14px;
+                font-weight: 600;
+                line-height: 1.5;
+                outline: none;
+            }
+
+            .query-input:focus {
+                border-color: var(--color-spruce-blue);
+                box-shadow: 0 0 0 3px rgba(124, 161, 164, 0.24);
+            }
+
+            .query-actions {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin-top: 10px;
+            }
+
+            .query-button {
+                padding: 9px 16px;
+                border: 1px solid var(--color-muted-pine);
+                border-radius: 8px;
+                background: var(--color-sage-glint);
+                color: var(--color-dark-slate);
+                font-weight: 700;
+                cursor: pointer;
+            }
+
+            .query-status {
+                padding: 7px 10px;
+                border: 1px solid var(--color-muted-pine);
+                border-radius: 7px;
+                color: var(--color-text-primary);
+                font-size: 13px;
+            }
+
+            .query-results-label {
+                margin-top: 18px;
+                margin-bottom: 8px;
+                color: var(--color-text-muted);
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+            }
+
+            .query-results {
+                margin-top: 14px;
+                max-height: 360px;
+                overflow: auto;
+                border: 1px solid var(--color-muted-pine);
+                background: var(--color-dark-slate);
+            }
+
+            .query-result-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-family: inherit;
+                font-size: 13px;
+            }
+
+            .query-result-table th,
+            .query-result-table td {
+                padding: 8px 10px;
+                text-align: left;
+                white-space: pre-wrap;
+                border-bottom: 1px solid rgba(91, 122, 114, 0.5);
+            }
+
+            .query-result-table tbody tr:nth-child(even) {
+                background: rgba(91, 122, 114, 0.12);
+            }
+
+            .query-result-table th {
+                position: sticky;
+                top: 0;
+                background: var(--color-midnight-moss);
+                color: var(--color-text-primary);
+                font-family: inherit;
+                font-size: 13px;
+                font-weight: 700;
+            }
+
+            .query-result-table td {
+                color: var(--color-text-primary);
             }
 
             .task-table {
@@ -199,6 +337,19 @@ app.index_string = '''
                 vertical-align: middle;
             }
 
+            .task-action-stack {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 5px;
+            }
+
+            .task-order-row {
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+            }
+
             .task-row-wrap {
                 display: flex;
                 flex-direction: column;
@@ -213,12 +364,30 @@ app.index_string = '''
                 width: 100%;
             }
 
+            .task-notes {
+                margin-top: 8px;
+            }
+
+            .task-notes-summary {
+                padding: 4px 6px;
+                color: var(--color-text-muted);
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 600;
+                list-style-position: inside;
+            }
+
+            .task-notes[open] .task-notes-summary {
+                margin-bottom: 6px;
+            }
+
             .task-title {
                 flex: 1;
                 text-align: center;
                 font-weight: 700;
                 color: var(--color-text-primary);
-                font-size: 17px;
+                font-size: 18px;
+                font-weight: 700;
             }
 
             .task-edit-input,
@@ -237,13 +406,16 @@ app.index_string = '''
                 padding: 4px 6px;
                 text-align: center;
                 font: inherit;
+                font-size: 18px;
+                font-weight: 700;
             }
 
             .note-edit-input {
                 flex: 1;
                 min-width: 0;
                 padding: 3px 5px;
-                font-size: 13px;
+                font-size: 14px;
+                font-weight: 600;
             }
 
             .note-input-row {
@@ -264,7 +436,8 @@ app.index_string = '''
                 height: 28px !important;
                 border: 1px solid var(--color-muted-pine);
                 border-radius: 8px;
-                font-size: 11px !important;
+                font-size: 13px !important;
+                font-weight: 600;
                 background: var(--color-deep-forest);
                 color: var(--color-text-primary);
                 box-sizing: border-box;
@@ -289,8 +462,32 @@ app.index_string = '''
                 background: linear-gradient(180deg, var(--color-spruce-blue) 0%, var(--color-misty-teal) 100%);
                 color: var(--color-dark-slate);
                 cursor: pointer;
-                font-size: 12px;
-                font-weight: 600;
+                font-size: 13px;
+                font-weight: 700;
+            }
+
+            .order-button {
+                width: 24px;
+                min-width: 24px;
+                height: 24px;
+                padding: 0;
+                border: 1px solid #4a504e;
+                border-radius: 5px;
+                background: #3a403e;
+                color: #c1c7c4;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: 700;
+                line-height: 1;
+            }
+
+            .note-item .order-button + .order-button {
+                margin-left: -3px;
+            }
+
+            .order-button:hover {
+                background: #555d59;
+                color: #f0f3f1;
             }
 
             .notes-list {
@@ -321,7 +518,8 @@ app.index_string = '''
                 flex: 1;
                 display: inline-block;
                 color: var(--color-text-primary);
-                font-size: 13px;
+                font-size: 14px;
+                font-weight: 600;
                 line-height: 1.4;
             }
 
@@ -451,6 +649,37 @@ app.index_string = '''
                         }, 80);
                     }
                 });
+
+                const taskNotesStateKey = 'todo-task-notes-open';
+                const restoreTaskNotesState = function () {
+                    let savedState = {};
+                    try {
+                        savedState = JSON.parse(localStorage.getItem(taskNotesStateKey) || '{}');
+                    } catch (error) {
+                        savedState = {};
+                    }
+
+                    document.querySelectorAll('details.task-notes').forEach(function (details) {
+                        const taskId = details.dataset.taskId;
+                        if (taskId && Object.prototype.hasOwnProperty.call(savedState, taskId)) {
+                            details.open = savedState[taskId];
+                        }
+                        if (details.dataset.stateBound === 'true') {
+                            return;
+                        }
+                        details.dataset.stateBound = 'true';
+                        details.addEventListener('toggle', function () {
+                            savedState[taskId] = details.open;
+                            localStorage.setItem(taskNotesStateKey, JSON.stringify(savedState));
+                        });
+                    });
+                };
+
+                restoreTaskNotesState();
+                new MutationObserver(restoreTaskNotesState).observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
             });
         </script>
     </body>
@@ -527,7 +756,29 @@ def random_palette():
 def fetch_tasks_df():
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute('SELECT task_id, task_value FROM tasks ORDER BY task_id')
+            cur.execute('''
+                WITH ordered_tasks AS (
+                    SELECT task_id, ROW_NUMBER() OVER (ORDER BY sort_order, task_id) AS new_order
+                    FROM tasks
+                )
+                UPDATE tasks
+                SET sort_order = ordered_tasks.new_order
+                FROM ordered_tasks
+                WHERE tasks.task_id = ordered_tasks.task_id
+            ''')
+            cur.execute('''
+                WITH ordered_notes AS (
+                    SELECT note_id,
+                           ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY sort_order, note_id) AS new_order
+                    FROM notes
+                )
+                UPDATE notes
+                SET sort_order = ordered_notes.new_order
+                FROM ordered_notes
+                WHERE notes.note_id = ordered_notes.note_id
+            ''')
+            conn.commit()
+            cur.execute('SELECT task_id, task_value FROM tasks ORDER BY sort_order, task_id')
             task_rows = cur.fetchall()
 
             if not task_rows:
@@ -536,7 +787,7 @@ def fetch_tasks_df():
             task_ids = [task_id for task_id, _ in task_rows]
             placeholders = ', '.join(['%s'] * len(task_ids))
             cur.execute(
-                f"SELECT task_id, note_value, completed FROM notes WHERE task_id IN ({placeholders}) ORDER BY note_id",
+                f"SELECT task_id, note_value, completed FROM notes WHERE task_id IN ({placeholders}) ORDER BY sort_order, note_id",
                 task_ids,
             )
             notes_by_task = {}
@@ -565,7 +816,7 @@ app.layout = html.Div([
     dcc.Store(id='todo-store', data=initial_data.to_json(date_format='iso', orient='split')),
 
     html.Div([
-        html.H1("To-Do List", style={'textAlign': 'center', 'marginBottom': '26px', 'color': '#e4ebe7'}),
+        html.H1("Tasks", style={'textAlign': 'center', 'marginBottom': '26px', 'color': '#e4ebe7'}),
 
         html.Div([
             dcc.Input(
@@ -584,6 +835,29 @@ app.layout = html.Div([
         ], className='todo-input-row'),
 
         html.Div(id='task-table', className='task-table-wrap'),
+
+        html.Details([
+            html.Summary('PostgreSQL Query Executor', className='query-summary'),
+            dcc.Textarea(
+                id='query-input',
+                className='query-input',
+                value='/* TASKS and NOTES tables */',
+                spellCheck=False,
+                style={
+                    'backgroundColor': '#1a2421',
+                    'color': '#e4ebe7',
+                    'borderColor': '#3b5249'
+                }
+            ),
+            html.Div([
+                html.Button('Run Query', id='query-run-button', n_clicks=0, className='query-button'),
+                html.Span(id='query-status', className='query-status')
+            ], className='query-actions'),
+            html.Div([
+                html.Div('Results', className='query-results-label'),
+                html.Div(id='query-results', className='query-results')
+            ])
+        ], className='query-panel', open=False)
     ], className='todo-app')
 ])
 
@@ -695,6 +969,10 @@ def note_value_outputs(note_values):
     Input({'type': 'note-delete-button', 'index': ALL}, 'n_clicks'),
     Input({'type': 'save-task-button', 'index': ALL}, 'n_clicks'),
     Input({'type': 'save-note-button', 'index': ALL}, 'n_clicks'),
+    Input({'type': 'task-move-up', 'index': ALL}, 'n_clicks'),
+    Input({'type': 'task-move-down', 'index': ALL}, 'n_clicks'),
+    Input({'type': 'note-move-up', 'index': ALL}, 'n_clicks'),
+    Input({'type': 'note-move-down', 'index': ALL}, 'n_clicks'),
     State('task-input', 'value'),
     State({'type': 'note-input', 'index': ALL}, 'value'),
     State({'type': 'task-edit', 'index': ALL}, 'value'),
@@ -703,8 +981,9 @@ def note_value_outputs(note_values):
     prevent_initial_call=True
 )
 def update_tasks(add_clicks, delete_clicks, add_note_clicks, note_complete_clicks, note_delete_clicks,
-                 save_task_clicks, save_note_clicks, task_value, note_values, task_edit_values,
-                 note_edit_values, current_store):
+                 save_task_clicks, save_note_clicks, task_move_up_clicks, task_move_down_clicks,
+                 note_move_up_clicks, note_move_down_clicks, task_value, note_values,
+                 task_edit_values, note_edit_values, current_store):
     trigger = ctx.triggered_id
     note_values = note_values or []
     task_edit_values = task_edit_values or []
@@ -718,7 +997,8 @@ def update_tasks(add_clicks, delete_clicks, add_note_clicks, note_complete_click
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO tasks (user_id, task_value) VALUES (%s, %s)",
+                    "INSERT INTO tasks (user_id, task_value, sort_order) "
+                    "VALUES (%s, %s, COALESCE((SELECT MAX(sort_order) + 1 FROM tasks), 1))",
                     ('local', formatted_task),
                 )
             conn.commit()
@@ -786,7 +1066,7 @@ def update_tasks(add_clicks, delete_clicks, add_note_clicks, note_complete_click
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        'SELECT note_id FROM notes WHERE task_id = %s ORDER BY note_id',
+                        'SELECT note_id FROM notes WHERE task_id = %s ORDER BY sort_order, note_id',
                         (task_id,),
                     )
                     note_rows = cur.fetchall()
@@ -796,6 +1076,52 @@ def update_tasks(add_clicks, delete_clicks, add_note_clicks, note_complete_click
                         'UPDATE notes SET note_value = %s WHERE note_id = %s',
                         (formatted_note, note_rows[note_index][0]),
                     )
+                conn.commit()
+
+            refreshed = fetch_tasks_df()
+            return refreshed.to_json(date_format='iso', orient='split'), '', note_value_outputs(note_values)
+
+        if trigger_type in ('task-move-up', 'task-move-down'):
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute('SELECT task_id, sort_order FROM tasks ORDER BY sort_order, task_id')
+                    task_rows = cur.fetchall()
+                    task_ids = [task_id for task_id, _ in task_rows]
+                    if trigger_index not in task_ids:
+                        return current_store, '', note_value_outputs(note_values)
+                    current_position = task_ids.index(trigger_index)
+                    neighbor_position = current_position - 1 if trigger_type == 'task-move-up' else current_position + 1
+                    if neighbor_position < 0 or neighbor_position >= len(task_rows):
+                        return current_store, '', note_value_outputs(note_values)
+                    current_id, current_order = task_rows[current_position]
+                    neighbor_id, neighbor_order = task_rows[neighbor_position]
+                    cur.execute('UPDATE tasks SET sort_order = %s WHERE task_id = %s', (neighbor_order, current_id))
+                    cur.execute('UPDATE tasks SET sort_order = %s WHERE task_id = %s', (current_order, neighbor_id))
+                conn.commit()
+
+            refreshed = fetch_tasks_df()
+            return refreshed.to_json(date_format='iso', orient='split'), '', note_value_outputs(note_values)
+
+        if trigger_type in ('note-move-up', 'note-move-down'):
+            parts = str(trigger_index).split('-')
+            if len(parts) != 2:
+                return current_store, '', note_value_outputs(note_values)
+            task_id = int(parts[0])
+            note_index = int(parts[1])
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        'SELECT note_id, sort_order FROM notes WHERE task_id = %s ORDER BY sort_order, note_id',
+                        (task_id,),
+                    )
+                    note_rows = cur.fetchall()
+                    neighbor_position = note_index - 1 if trigger_type == 'note-move-up' else note_index + 1
+                    if note_index < 0 or note_index >= len(note_rows) or neighbor_position < 0 or neighbor_position >= len(note_rows):
+                        return current_store, '', note_value_outputs(note_values)
+                    current_id, current_order = note_rows[note_index]
+                    neighbor_id, neighbor_order = note_rows[neighbor_position]
+                    cur.execute('UPDATE notes SET sort_order = %s WHERE note_id = %s', (neighbor_order, current_id))
+                    cur.execute('UPDATE notes SET sort_order = %s WHERE note_id = %s', (current_order, neighbor_id))
                 conn.commit()
 
             refreshed = fetch_tasks_df()
@@ -817,7 +1143,7 @@ def update_tasks(add_clicks, delete_clicks, add_note_clicks, note_complete_click
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        'SELECT note_id FROM notes WHERE task_id = %s ORDER BY note_id',
+                        'SELECT note_id FROM notes WHERE task_id = %s ORDER BY sort_order, note_id',
                         (task_id,),
                     )
                     note_rows = cur.fetchall()
@@ -855,8 +1181,9 @@ def update_tasks(add_clicks, delete_clicks, add_note_clicks, note_complete_click
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        'INSERT INTO notes (task_id, note_value) VALUES (%s, %s)',
-                        (task_id, formatted_note),
+                        'INSERT INTO notes (task_id, note_value, sort_order) '
+                        'VALUES (%s, %s, COALESCE((SELECT MAX(sort_order) + 1 FROM notes WHERE task_id = %s), 1))',
+                        (task_id, formatted_note, task_id),
                     )
                 conn.commit()
 
@@ -922,7 +1249,7 @@ def update_table(data):
                         className='note-complete-button',
                         title='Save note changes',
                         id={'type': 'save-note-button', 'index': f"{row['ID']}-{i}"},
-                        style={'padding': '2px 6px', 'fontSize': '10px', 'minWidth': '34px',
+                        style={'padding': '3px 7px', 'fontSize': '12px', 'fontWeight': '700', 'minWidth': '42px',
                                'background': theme['button'], 'color': theme['button_text'],
                                'borderColor': theme['border']}
                     ),
@@ -932,9 +1259,25 @@ def update_table(data):
                         className='note-complete-button',
                         title='Mark note incomplete' if note_completed else 'Cross off note',
                         id={'type': 'note-complete-button', 'index': f"{row['ID']}-{i}"},
-                        style={'padding': '2px 6px', 'fontSize': '10px', 'minWidth': '34px',
+                        style={'padding': '3px 7px', 'fontSize': '12px', 'fontWeight': '700', 'minWidth': '42px',
                                'background': theme['button'], 'color': theme['button_text'],
                                'borderColor': theme['border']}
+                    ),
+                    html.Button(
+                        '↑',
+                        n_clicks=0,
+                        className='order-button',
+                        title='Move note up',
+                        id={'type': 'note-move-up', 'index': f"{row['ID']}-{i}"},
+                        style={'background': theme['button'], 'color': theme['button_text'], 'borderColor': theme['border']}
+                    ),
+                    html.Button(
+                        '↓',
+                        n_clicks=0,
+                        className='order-button',
+                        title='Move note down',
+                        id={'type': 'note-move-down', 'index': f"{row['ID']}-{i}"},
+                        style={'background': theme['button'], 'color': theme['button_text'], 'borderColor': theme['border']}
                     ),
                     html.Button(
                         '×',
@@ -942,7 +1285,7 @@ def update_table(data):
                         className='delete-button',
                         title='Delete note permanently',
                         id={'type': 'note-delete-button', 'index': f"{row['ID']}-{i}"},
-                        style={'width': '18px', 'height': '18px', 'fontSize': '12px', 'minWidth': '18px',
+                        style={'width': '22px', 'height': '22px', 'fontSize': '14px', 'fontWeight': '700', 'minWidth': '22px',
                                'background': theme['button'], 'color': theme['button_text'],
                                'borderColor': theme['border']}
                     )
@@ -992,49 +1335,77 @@ def update_table(data):
                                     className='note-complete-button',
                                     title='Save task changes',
                                     id={'type': 'save-task-button', 'index': row['ID']},
-                                    style={'padding': '4px 7px', 'fontSize': '10px', 'minWidth': '38px',
+                                    style={'padding': '5px 8px', 'fontSize': '12px', 'fontWeight': '700', 'minWidth': '46px',
                                            'background': theme['button'], 'color': theme['button_text'],
                                            'borderColor': theme['border']}
                                 ),
                             ], className='task-header'),
-                            html.Ul(note_items, className='notes-list', style=notes_style) if note_items else None,
-                            html.Div([
-                                dcc.Input(
-                                    id={'type': 'note-input', 'index': row['ID']},
-                                    type='text',
-                                    placeholder='add note',
-                                    className='note-input',
-                                    style={
-                                        **input_style,
-                                        'width': '110px',
-                                        'minWidth': '110px',
-                                        'maxWidth': '110px',
-                                        'padding': '5px 8px',
-                                        'height': '28px',
-                                        'fontSize': '11px'
-                                    }
+                            html.Details([
+                                html.Summary(
+                                    f"Notes ({len(notes)})",
+                                    className='task-notes-summary'
                                 ),
-                                html.Button(
-                                    'Add',
-                                    id={'type': 'add-note-button', 'index': row['ID']},
-                                    n_clicks=0,
-                                    className='note-button',
-                                    style={'background': theme['button'], 'color': theme['button_text'], 'borderColor': theme['border'], 'padding': '7px 10px', 'minWidth': '46px'}
-                                )
-                            ], className='note-input-row')
+                                html.Ul(note_items, className='notes-list', style=notes_style) if note_items else None,
+                                html.Div([
+                                    dcc.Input(
+                                        id={'type': 'note-input', 'index': row['ID']},
+                                        type='text',
+                                        placeholder='add note',
+                                        className='note-input',
+                                        style={
+                                            **input_style,
+                                            'width': '110px',
+                                            'minWidth': '110px',
+                                            'maxWidth': '110px',
+                                            'padding': '5px 8px',
+                                            'height': '28px',
+                                            'fontSize': '13px',
+                                            'fontWeight': '600'
+                                        }
+                                    ),
+                                    html.Button(
+                                        'Add',
+                                        id={'type': 'add-note-button', 'index': row['ID']},
+                                        n_clicks=0,
+                                        className='note-button',
+                                        style={'background': theme['button'], 'color': theme['button_text'], 'borderColor': theme['border'], 'padding': '7px 10px', 'minWidth': '46px'}
+                                    )
+                                ], className='note-input-row')
+                                     ], className='task-notes', open=False,
+                                         **{'data-task-id': str(row['ID'])})
                         ],
                         className='task-row-wrap',
                         style=task_style
                     )
                 ], className='task-text-cell', style={'padding': '10px', 'borderBottom': '1px solid #ddd'}),
                 html.Td(
-                    html.Button(
-                        '×',
-                        n_clicks=0,
-                        className='delete-button',
-                        id={'type': 'delete-button', 'index': row['ID']},
-                        style={'background': theme['button'], 'color': theme['button_text'], 'borderColor': theme['border']}
-                    ),
+                    html.Div([
+                        html.Button(
+                            '×',
+                            n_clicks=0,
+                            className='delete-button',
+                            id={'type': 'delete-button', 'index': row['ID']},
+                            style={'background': theme['button'], 'color': theme['button_text'], 'borderColor': theme['border']}
+                        ),
+                        html.Div([
+                            html.Button(
+                                '↑',
+                                n_clicks=0,
+                                className='order-button',
+                                title='Move task up',
+                                id={'type': 'task-move-up', 'index': row['ID']},
+                                style={'background': theme['button'], 'color': theme['button_text'], 'borderColor': theme['border']}
+                            ),
+                            html.Button(
+                                '↓',
+                                n_clicks=0,
+                                className='order-button',
+                                title='Move task down',
+                                id={'type': 'task-move-down', 'index': row['ID']},
+                                style={'background': theme['button'], 'color': theme['button_text'], 'borderColor': theme['border']}
+                            )
+                        ], className='task-order-row')
+                    ], className='task-action-stack'),
                     className='task-delete-cell',
                     style={'padding': '10px', 'borderBottom': '1px solid #ddd'}
                 )
@@ -1044,6 +1415,66 @@ def update_table(data):
     return html.Table([
         html.Tbody(rows)
     ], className='task-table')
+
+
+@callback(
+    Output('query-results', 'children'),
+    Output('query-status', 'children'),
+    Input('query-run-button', 'n_clicks'),
+    State('query-input', 'value'),
+    prevent_initial_call=True
+)
+def run_query(n_clicks, query_text):
+    query = (query_text or '').strip()
+    query_for_validation = query
+    while query_for_validation.startswith('/*'):
+        comment_end = query_for_validation.find('*/', 2)
+        if comment_end == -1:
+            return '', 'Close the SQL block comment before running the query.'
+        query_for_validation = query_for_validation[comment_end + 2:].lstrip()
+
+    if not query_for_validation:
+        return '', 'Enter a SELECT query first.'
+
+    if not re.match(r'^SELECT\b', query_for_validation, flags=re.IGNORECASE):
+        return '', 'Only read-only SELECT queries are allowed.'
+
+    query_without_final_semicolon = query_for_validation.rstrip(';').rstrip()
+    if ';' in query_without_final_semicolon:
+        return '', 'Run one query at a time; multiple statements are not allowed.'
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SET TRANSACTION READ ONLY')
+                cur.execute(query)
+                columns = [column.name for column in cur.description or []]
+                result_rows = cur.fetchmany(500)
+                has_more_rows = cur.fetchone() is not None
+
+        if not columns:
+            return html.P('Query completed without a result set.'), 'Query completed.'
+
+        header = html.Tr([html.Th(column) for column in columns])
+        body = [
+            html.Tr([
+                html.Td('NULL' if value is None else str(value))
+                for value in row
+            ])
+            for row in result_rows
+        ]
+        result_table = html.Table(
+            [html.Thead(header), html.Tbody(body)],
+            className='query-result-table'
+        )
+        row_status = f'{len(result_rows)} row(s) returned'
+        if has_more_rows:
+            row_status += ' (showing the first 500)'
+        return result_table, row_status
+    except psycopg.Error as error:
+        return '', f'Query error: {error}'.split('\n')[0]
+    except Exception as error:
+        return '', f'Query error: {error}'
 
 if __name__ == '__main__':
     app.run(debug=True)
